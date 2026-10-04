@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#111">
+<title>Randazoid's Backyard Adventure</title>
+<style>
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none;touch-action:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#111;font-family:Arial Black,Arial,sans-serif}
+#app{height:100%;display:flex;flex-direction:column;background:linear-gradient(#151515,#292929);color:white}
+#top{height:calc(100% - 190px);min-height:260px;position:relative}
+canvas{width:100%;height:100%;display:block;background:#62b8e8;image-rendering:auto}
+#hud{position:absolute;inset:8px 10px auto 10px;display:flex;justify-content:space-between;gap:8px;font-size:13px;text-shadow:2px 2px #000;pointer-events:none}
+#msg{position:absolute;left:50%;top:18%;transform:translateX(-50%);text-align:center;text-shadow:3px 3px #000;pointer-events:none;width:90%}
+#msg h1{font-size:clamp(28px,7vw,58px);margin:0;color:#ffd33d;-webkit-text-stroke:2px #b02a1c}
+#msg p{margin:8px 0;font-family:Arial,sans-serif;font-weight:bold}
+#controls{height:190px;display:grid;grid-template-columns:1fr 125px 1fr;align-items:center;padding:10px 18px;background:linear-gradient(#c9c9c4,#999);border-top:7px solid #333;box-shadow:inset 0 4px #eee}
+.dpad{width:132px;height:132px;position:relative;margin:auto}
+.key{position:absolute;width:44px;height:44px;background:#222;border:3px solid #111;color:#aaa;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:inset 2px 2px #444,inset -2px -2px #000}
+.up{left:44px;top:0}.down{left:44px;bottom:0}.left{left:0;top:44px}.right{right:0;top:44px}.center{left:44px;top:44px;background:#191919}
+.mid{text-align:center;color:#333;font-size:10px}
+.small{display:flex;gap:10px;justify-content:center;transform:rotate(-8deg);margin-top:12px}
+.small button{border:0;border-radius:10px;width:48px;height:15px;background:#333;box-shadow:inset 1px 1px #666;color:transparent}
+.labels{display:flex;justify-content:center;gap:15px;margin-top:4px;font-size:9px}
+.ab{height:132px;position:relative;max-width:170px;margin:auto}
+.round{position:absolute;width:62px;height:62px;border-radius:50%;border:5px solid #777;background:#b62031;color:#eee;font-size:24px;font-weight:bold;box-shadow:inset 3px 3px #df5360,inset -4px -4px #70101a}
+#b{left:5px;bottom:8px}#a{right:5px;top:8px}
+.brand{font-style:italic;font-size:16px;margin-bottom:6px}.brand b{color:#b62031}
+@media (orientation:landscape){#top{height:calc(100% - 145px)}#controls{height:145px}.dpad{transform:scale(.82)}.ab{transform:scale(.82)}}
+</style>
+</head>
+<body>
+<div id="app">
+ <div id="top">
+  <canvas id="game"></canvas>
+  <div id="hud"><span id="score">SCORE 000000</span><span id="items">🌮 0 &nbsp; 💿 0</span><span id="lives">♥♥♥</span></div>
+  <div id="msg"><h1>RANDAZOID'S<br>BACKYARD ADVENTURE</h1><p>WORLD 1-1 · SOUTH TEXAS BACKYARD</p><p>PRESS START</p></div>
+ </div>
+ <div id="controls">
+  <div class="dpad">
+   <div class="key up" data-key="up">▲</div><div class="key left" data-key="left">◀</div><div class="key center"></div><div class="key right" data-key="right">▶</div><div class="key down" data-key="down">▼</div>
+  </div>
+  <div class="mid"><div class="brand"><b>FUNTRON</b><br>VIDEO GAME SYSTEM</div>
+   <div class="small"><button data-key="select"></button><button data-key="start"></button></div>
+   <div class="labels"><span>SELECT</span><span>START</span></div>
+  </div>
+  <div class="ab"><button class="round" id="b" data-key="b">B</button><button class="round" id="a" data-key="a">A</button></div>
+ </div>
+</div>
+<script>
+const c=document.getElementById('game'),x=c.getContext('2d');
+let W,H,scale=1; function resize(){c.width=innerWidth*devicePixelRatio;c.height=document.getElementById('top').clientHeight*devicePixelRatio;W=c.width;H=c.height;scale=devicePixelRatio} addEventListener('resize',resize);resize();
+const keys={left:0,right:0,up:0,down:0,a:0,b:0,start:0,select:0};
+document.querySelectorAll('[data-key]').forEach(el=>{
+ let k=el.dataset.key;
+ const on=e=>{e.preventDefault(); if(!keys[k] && k==='a') jump(); if(!keys[k]&&k==='start') start(); keys[k]=1};
+ const off=e=>{e.preventDefault();keys[k]=0};
+ el.addEventListener('pointerdown',on);el.addEventListener('pointerup',off);el.addEventListener('pointercancel',off);el.addEventListener('pointerleave',off)
+});
+addEventListener('keydown',e=>{let m={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',z:'a',x:'b',Enter:'start'}[e.key];if(m){if(!keys[m]&&m==='a')jump();if(!keys[m]&&m==='start')start();keys[m]=1}});
+addEventListener('keyup',e=>{let m={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',z:'a',x:'b',Enter:'start'}[e.key];if(m)keys[m]=0});
+
+const worldW=7200, ground=430;
+let state='title',cam=0,score=0,tacos=0,records=0;
+let p={x:160,y:200,w:44,h:70,vx:0,vy:0,on:false,hp:3,face:1,inv:0};
+const platforms=[
+ [0,ground,1100,90],[1200,ground,550,90],[1840,ground,900,90],[2840,ground,460,90],[3400,ground,900,90],[4420,ground,650,90],[5200,ground,900,90],[6200,ground,1000,90],
+ [620,330,180,24],[930,270,150,24],[1470,320,160,24],[2050,300,220,24],[2490,240,150,24],[3020,310,160,24],[3660,280,210,24],[4050,215,150,24],[4660,320,180,24],[5480,280,190,24],[5840,220,150,24],[6500,310,180,24]
+];
+let goodies=[
+ ['t',450,385],['r',690,290],['t',980,230],['t',1510,280],['r',2110,260],['t',2530,200],['r',3070,270],['t',3720,240],['r',4100,175],['t',4710,280],['r',5540,240],['t',5900,180],['t',6570,270]
+].map(a=>({type:a[0],x:a[1],y:a[2],got:0}));
+let enemies=[900,1580,2200,3140,3900,4800,5700,6650].map((q,i)=>({x:q,y:ground-38,w:50,h:38,v:i%2?-.8:.8,alive:1}));
+function start(){if(state==='title'||state==='dead'||state==='win'){state='play';document.getElementById('msg').style.display='none';reset() }else if(state==='play'){state='pause';show('PAUSED','PRESS START')}else if(state==='pause'){state='play';document.getElementById('msg').style.display='none'}}
+function show(a,b){let m=document.getElementById('msg');m.style.display='block';m.innerHTML=`<h1>${a}</h1><p>${b}</p>`}
+function reset(){p={x:160,y:200,w:44,h:70,vx:0,vy:0,on:false,hp:3,face:1,inv:0};cam=0;score=0;tacos=0;records=0;goodies.forEach(g=>g.got=0);enemies.forEach(e=>e.alive=1)}
+function jump(){if(state==='play'&&p.on){p.vy=-12.5;p.on=false}}
+function rect(a,b){return a.x<b[0]+b[2]&&a.x+a.w>b[0]&&a.y<b[1]+b[3]&&a.y+a.h>b[1]}
+function update(){
+ if(state!=='play')return;
+ let max=keys.b?6.3:4.2,acc=.65;
+ if(keys.left){p.vx=Math.max(p.vx-acc,-max);p.face=-1} else if(keys.right){p.vx=Math.min(p.vx+acc,max);p.face=1}else p.vx*=.78;
+ p.vy+=.58;p.x+=p.vx;p.x=Math.max(0,Math.min(worldW-p.w,p.x));p.y+=p.vy;p.on=false;
+ for(const q of platforms){if(rect(p,q)&&p.vy>=0&&p.y+p.h-p.vy<=q[1]+8){p.y=q[1]-p.h;p.vy=0;p.on=true}}
+ if(p.y>H/scale+180){p.hp--; if(p.hp<=0){state='dead';show('GAME OVER','PRESS START')}else{p.x=Math.max(100,cam+100);p.y=100;p.vy=0}}
+ for(const g of goodies){if(!g.got&&Math.abs((p.x+p.w/2)-g.x)<38&&Math.abs((p.y+p.h/2)-g.y)<45){g.got=1;score+=g.type==='t'?100:250;if(g.type==='t')tacos++;else records++}}
+ enemies.forEach(e=>{if(!e.alive)return;e.x+=e.v;if(e.x<50||e.x>worldW-50)e.v*=-1;if(p.inv<=0&&p.x<e.x+e.w&&p.x+p.w>e.x&&p.y<e.y+e.h&&p.y+p.h>e.y){if(p.vy>2&&p.y+p.h<e.y+22){e.alive=0;p.vy=-8;score+=300}else{p.hp--;p.inv=90;p.vy=-7;p.vx=-p.face*5;if(p.hp<=0){state='dead';show('GAME OVER','PRESS START')}}}});
+ if(p.inv>0)p.inv--;
+ cam+=(p.x-W/scale*.38-cam)*.08;cam=Math.max(0,Math.min(worldW-W/scale,cam));
+ if(p.x>7040){state='win';score+=1000;show('WORLD 1-1 CLEAR!','RANDAZOID FOUND THE BACKYARD GATE · PRESS START')}
+ document.getElementById('score').textContent='SCORE '+String(score).padStart(6,'0');document.getElementById('items').innerHTML='🌮 '+tacos+' &nbsp; 💿 '+records;document.getElementById('lives').textContent='♥'.repeat(Math.max(0,p.hp));
+}
+function drawRandazoid(px,py){
+ x.save();x.translate((px-cam)*scale,py*scale);x.scale(scale,scale);
+ if(p.inv&&Math.floor(p.inv/5)%2){x.restore();return}
+ // shoes/legs
+ x.fillStyle='#eee';x.fillRect(6,55,15,11);x.fillRect(29,55,15,11);x.fillStyle='#333';x.fillRect(5,63,18,7);x.fillRect(28,63,18,7);
+ x.fillStyle='#6e5b3d';x.fillRect(8,43,13,15);x.fillRect(29,43,13,15);
+ // shorts/body
+ x.fillStyle='#596443';x.fillRect(5,29,39,22);x.fillStyle='#f0e2c4';x.fillRect(7,18,35,18);
+ // beard + face
+ x.fillStyle='#d49b69';x.beginPath();x.arc(25,13,15,0,Math.PI*2);x.fill();x.fillStyle='#4a281a';x.beginPath();x.arc(25,19,14,0,Math.PI);x.fill();
+ // curly hair blobs
+ x.fillStyle='#3b2419';for(let i=0;i<11;i++){let a=i/10*Math.PI*2;x.beginPath();x.arc(25+Math.cos(a)*15,8+Math.sin(a)*11,6,0,7);x.fill()}
+ x.fillStyle='#fff';x.fillRect(p.face>0?28:16,9,5,5);x.fillStyle='#111';x.fillRect(p.face>0?31:16,11,2,2);
+ x.restore();
+}
+function draw(){
+ x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,W,H);x.scale(scale,scale);let vw=W/scale,vh=H/scale;
+ // sky
+ let gr=x.createLinearGradient(0,0,0,vh);gr.addColorStop(0,'#57b8eb');gr.addColorStop(1,'#ffd28a');x.fillStyle=gr;x.fillRect(0,0,vw,vh);
+ // distant South Texas brush / city
+ x.fillStyle='rgba(80,90,90,.18)';for(let i=0;i<20;i++){let xx=(i*430-cam*.18)%(vw+500)-200;x.fillRect(xx,300,280,130)}
+ x.fillStyle='#3f7739';for(let i=0;i<35;i++){let xx=(i*250-cam*.4)%(vw+300)-150;x.beginPath();x.arc(xx,380,75,0,Math.PI*2);x.fill()}
+ // sun
+ x.fillStyle='#ffe36d';x.beginPath();x.arc(vw-110,90,44,0,7);x.fill();
+ // platforms
+ for(const q of platforms){let xx=q[0]-cam;if(xx>vw||xx+q[2]<0)continue;x.fillStyle='#774726';x.fillRect(xx,q[1],q[2],q[3]);x.fillStyle='#4a9d3b';x.fillRect(xx,q[1],q[2],12);x.fillStyle='#6cc24a';for(let z=0;z<q[2];z+=32)x.fillRect(xx+z,q[1]-4,20,8)}
+ // cactus
+ for(let i=500;i<worldW;i+=850){let xx=i-cam;if(xx>-50&&xx<vw+50){x.fillStyle='#318b4e';x.fillRect(xx,ground-105,25,105);x.fillRect(xx-22,ground-78,25,18);x.fillRect(xx-20,ground-98,12,30);x.fillRect(xx+20,ground-60,25,18);x.fillRect(xx+34,ground-80,12,30)}}
+ // goodies
+ goodies.forEach(g=>{if(g.got)return;let xx=g.x-cam;if(xx<0||xx>vw)return;x.font='34px Arial';x.fillText(g.type==='t'?'🌮':'💿',xx-16,g.y+15)});
+ // enemies: armadillo-ish
+ enemies.forEach(e=>{if(!e.alive)return;let xx=e.x-cam;if(xx<-80||xx>vw+80)return;x.fillStyle='#777';x.beginPath();x.ellipse(xx+25,e.y+18,25,17,0,0,7);x.fill();x.strokeStyle='#aaa';for(let j=8;j<42;j+=8){x.beginPath();x.moveTo(xx+j,e.y+5);x.lineTo(xx+j-5,e.y+31);x.stroke()}x.fillStyle='#333';x.fillRect(xx+43,e.y+17,10,7)});
+ // gate goal
+ let gx=7070-cam;if(gx<vw){x.fillStyle='#75452d';x.fillRect(gx,180,18,250);x.fillRect(gx+90,180,18,250);for(let yy=210;yy<430;yy+=40)x.fillRect(gx,yy,108,10);x.fillStyle='#fff';x.font='bold 18px Arial';x.fillText('BACKYARD',gx+8,165)}
+ drawRandazoid(p.x,p.y);
+ // title decorative clouds
+ x.fillStyle='rgba(255,255,255,.8)';for(let i=0;i<5;i++){let xx=(i*330-cam*.1)%(vw+300);x.beginPath();x.arc(xx,110+i%2*40,35,0,7);x.arc(xx+35,110+i%2*40,45,0,7);x.arc(xx+75,110+i%2*40,30,0,7);x.fill()}
+}
+function loop(){update();draw();requestAnimationFrame(loop)}loop();
+</script>
+</body></html>
